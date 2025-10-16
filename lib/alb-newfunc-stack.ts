@@ -112,7 +112,7 @@ export class AlbNewfuncStack extends cdk.Stack {
             'echo "<h1>Server 2 - Old API</h1><p>This path was rewritten and handled by Server 2</p>" > /var/www/html/old-api/index.html'
         );
 
-        const instance2 = new ec2.Instance(this, 'WebServer2', {
+        const instance2 = new ec2.Instance(this, 'WebServer2v2', {
             vpc,
             instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
             machineImage: ec2.MachineImage.latestAmazonLinux2(),
