@@ -193,11 +193,12 @@ export class AlbNewfuncStack extends cdk.Stack {
         });
 
         // RewriteConfigを追加（型定義にないため、addPropertyOverrideを使用）
-        pathRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
-            Path: {
-                Value: '/new-api/#{path}'
-            }
-        });
+        // 注意: ap-northeast-1リージョンではRewriteConfigがまだサポートされていないため、コメントアウト
+        // pathRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
+        //     Path: {
+        //         Value: '/new-api/#{path}'
+        //     }
+        // });
 
         // 2. ホストヘッダー api.example.com を newapi.example.com に書き換えて TargetGroup2 にルーティング
         const hostRewriteRule = new elbv2.CfnListenerRule(this, 'ApiHostRewriteRule', {
@@ -228,11 +229,12 @@ export class AlbNewfuncStack extends cdk.Stack {
         });
 
         // ホストヘッダーのRewriteConfigを追加
-        hostRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
-            Host: {
-                Value: 'newapi.example.com'
-            }
-        });
+        // 注意: ap-northeast-1リージョンではRewriteConfigがまだサポートされていないため、コメントアウト
+        // hostRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
+        //     Host: {
+        //         Value: 'newapi.example.com'
+        //     }
+        // });
 
         // 3. クエリパラメータ version=v1 をそのまま保持して TargetGroup2 にルーティング
         // （クエリパラメータにsource=albを追加）
@@ -269,11 +271,12 @@ export class AlbNewfuncStack extends cdk.Stack {
         });
 
         // クエリパラメータのRewriteConfigを追加
-        queryRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
-            Query: {
-                Value: '#{query}&source=alb'
-            }
-        });        // 出力値
+        // 注意: ap-northeast-1リージョンではRewriteConfigがまだサポートされていないため、コメントアウト
+        // queryRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
+        //     Query: {
+        //         Value: '#{query}&source=alb'
+        //     }
+        // });        // 出力値
         new cdk.CfnOutput(this, 'ALBDnsName', {
             value: alb.loadBalancerDnsName,
             description: 'ALB DNS Name',
@@ -281,20 +284,16 @@ export class AlbNewfuncStack extends cdk.Stack {
 
         new cdk.CfnOutput(this, 'TestInstructions', {
             value: [
-                'Test the URL rewrite functionality:',
-                '1. Path rewrite: curl -v http://' + alb.loadBalancerDnsName + '/old-api/test',
-                '   Expected: Path is rewritten to /new-api/old-api/test',
+                'Test the routing functionality:',
+                '1. Path routing: curl http://' + alb.loadBalancerDnsName + '/old-api/test',
+                '2. Host header routing: curl -H "Host: api.example.com" http://' + alb.loadBalancerDnsName + '/',
+                '3. Query param routing: curl http://' + alb.loadBalancerDnsName + '/?version=v1',
                 '',
-                '2. Host header rewrite: curl -v -H "Host: api.example.com" http://' + alb.loadBalancerDnsName + '/',
-                '   Expected: Host header is rewritten to newapi.example.com',
-                '',
-                '3. Query param rewrite: curl -v http://' + alb.loadBalancerDnsName + '/?version=v1',
-                '   Expected: Query parameter "source=alb" is added',
-                '',
-                'Note: URL rewrite feature is now implemented using CDK addPropertyOverride.',
-                'The RewriteConfig is automatically included in the CloudFormation template.'
+                'Note: URL RewriteConfig feature is not yet supported in ap-northeast-1 region.',
+                'Current implementation uses basic routing without path/host/query rewriting.',
+                'See REWRITE_IMPLEMENTATION.md for details on enabling RewriteConfig when available.'
             ].join('\\n'),
-            description: 'Instructions to test URL rewrite features',
+            description: 'Instructions to test routing features',
         });
     }
 }
