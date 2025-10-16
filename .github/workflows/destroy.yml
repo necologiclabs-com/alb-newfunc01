@@ -1,0 +1,62 @@
+name: Destroy Stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      stack_name:
+        description: 'Stack name to destroy'
+        required: true
+        default: 'AlbNewfuncStack'
+      confirmation:
+        description: 'Type "destroy" to confirm'
+        required: true
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  destroy:
+    name: Destroy CDK Stack
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "destroy" ]; then
+            echo "❌ Confirmation failed. Please type 'destroy' to confirm."
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: CDK Destroy
+        run: |
+          npx cdk destroy ${{ github.event.inputs.stack_name }} --force
+
+      - name: Notify destruction success
+        if: success()
+        run: |
+          echo "✅ Stack ${{ github.event.inputs.stack_name }} destroyed successfully!"
+
+      - name: Notify destruction failure
+        if: failure()
+        run: |
+          echo "❌ Failed to destroy stack ${{ github.event.inputs.stack_name }}"
+          exit 1

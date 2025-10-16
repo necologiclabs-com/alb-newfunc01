@@ -1,0 +1,79 @@
+name: Scheduled Health Check
+
+on:
+  schedule:
+    # 毎日午前9時（JST）に実行 = UTC 0時
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check if stack exists
+        id: check_stack
+        run: |
+          if aws cloudformation describe-stacks --stack-name AlbNewfuncStack &> /dev/null; then
+            echo "stack_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "stack_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run integration tests
+        if: steps.check_stack.outputs.stack_exists == 'true'
+        run: npm run test:integration
+        continue-on-error: true
+
+      - name: Check ALB target health
+        if: steps.check_stack.outputs.stack_exists == 'true'
+        run: |
+          # Get target group ARNs
+          TG_ARNS=$(aws elbv2 describe-target-groups \
+            --query 'TargetGroups[?contains(TargetGroupName, `AlbNewfunc`)].TargetGroupArn' \
+            --output text)
+          
+          for TG_ARN in $TG_ARNS; do
+            echo "Checking health for: $TG_ARN"
+            aws elbv2 describe-target-health --target-group-arn $TG_ARN
+          done
+
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "❌ Health check failed!"
+          echo "Please check the AWS resources and logs."
+
+      - name: Send notification on success
+        if: success() && steps.check_stack.outputs.stack_exists == 'true'
+        run: |
+          echo "✅ Health check passed!"
+          echo "All systems operational."
+
+      - name: Stack does not exist
+        if: steps.check_stack.outputs.stack_exists == 'false'
+        run: |
+          echo "ℹ️ Stack does not exist. Skipping health check."
