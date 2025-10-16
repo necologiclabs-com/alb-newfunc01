@@ -105,7 +105,11 @@ export class AlbNewfuncStack extends cdk.Stack {
             'systemctl start httpd',
             'systemctl enable httpd',
             'echo "<h1>Server 2 - Rewritten Path</h1><p>This is the new API v2</p>" > /var/www/html/index.html',
-            'echo "<h1>Server 2 - New API</h1><p>This is API v2</p>" > /var/www/html/newapi.html'
+            'echo "<h1>Server 2 - New API</h1><p>This is API v2</p>" > /var/www/html/newapi.html',
+            // /old-api パス用のディレクトリとファイルを作成
+            'mkdir -p /var/www/html/old-api',
+            'echo "<h1>Server 2 - Old API</h1><p>This path was rewritten and handled by Server 2</p>" > /var/www/html/old-api/test.html',
+            'echo "<h1>Server 2 - Old API</h1><p>This path was rewritten and handled by Server 2</p>" > /var/www/html/old-api/index.html'
         );
 
         const instance2 = new ec2.Instance(this, 'WebServer2', {
