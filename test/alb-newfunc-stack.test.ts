@@ -229,7 +229,7 @@ describe('AlbNewfuncStack', () => {
 
         test('Should output test instructions', () => {
             template.hasOutput('TestInstructions', {
-                Description: 'Instructions to test routing features',
+                Description: 'Instructions to test URL rewrite features',
             });
         });
     });
