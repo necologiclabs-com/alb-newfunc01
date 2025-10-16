@@ -156,12 +156,12 @@ async function runIntegrationTests() {
             const response = await makeRequest(`${baseUrl}/old-api/test`);
 
             if (response.statusCode !== 200 && response.statusCode !== 404) {
-                throw new Error(`Expected status 200 or 404, got ${response.statusCode}`);
+                throw new Error(`Expected status 200 or 404, got ${response.statusCode}. Body: ${response.body.substring(0, 200)}`);
             }
 
             // Even if 404, it should be from Server 2
             if (!response.body.includes('Server 2') && !response.body.includes('Server')) {
-                throw new Error('Expected routing to Server 2');
+                throw new Error(`Expected routing to Server 2. Status: ${response.statusCode}, Body preview: ${response.body.substring(0, 200)}`);
             }
         })
     );

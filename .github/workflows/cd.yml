@@ -70,8 +70,50 @@ jobs:
 
       - name: Wait for deployment to be ready
         run: |
-          echo "Waiting 60 seconds for instances to become healthy..."
-          sleep 60
+          echo "Waiting for EC2 instances to become healthy..."
+          
+          # スタック名を取得
+          STACK_NAME="AlbNewfuncStack"
+          
+          # ターゲットグループのARNを取得
+          TG_ARNS=$(aws cloudformation describe-stack-resources \
+            --stack-name $STACK_NAME \
+            --query "StackResources[?ResourceType=='AWS::ElasticLoadBalancingV2::TargetGroup'].PhysicalResourceId" \
+            --output text)
+          
+          # 各ターゲットグループのヘルスチェック
+          for TG_ARN in $TG_ARNS; do
+            echo "Checking target group: $TG_ARN"
+            
+            # 最大5分間待機（10秒 x 30回）
+            for i in {1..30}; do
+              HEALTHY_COUNT=$(aws elbv2 describe-target-health \
+                --target-group-arn $TG_ARN \
+                --query "length(TargetHealthDescriptions[?TargetHealth.State=='healthy'])" \
+                --output text)
+              
+              TOTAL_COUNT=$(aws elbv2 describe-target-health \
+                --target-group-arn $TG_ARN \
+                --query "length(TargetHealthDescriptions)" \
+                --output text)
+              
+              echo "Attempt $i/30: $HEALTHY_COUNT/$TOTAL_COUNT targets healthy"
+              
+              if [ "$HEALTHY_COUNT" -gt "0" ]; then
+                echo "✅ Target group has healthy targets!"
+                break
+              fi
+              
+              if [ $i -eq 30 ]; then
+                echo "⚠️ Timeout waiting for healthy targets, but continuing..."
+              fi
+              
+              sleep 10
+            done
+          done
+          
+          echo "Waiting additional 30 seconds for stabilization..."
+          sleep 30
 
       - name: Run integration tests
         id: integration_test
