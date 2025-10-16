@@ -161,37 +161,118 @@ export class AlbNewfuncStack extends cdk.Stack {
         });
 
         // URL書き換えルールを追加
-        // 注意：rewriteConfigはCloudFormationの新機能で、CDKのTypeScript定義がまだ完全でない可能性があります
-        // そのため、基本的なルーティングルールとして実装し、後でCloudFormationテンプレートを手動調整します
+        // L1コンストラクト（CfnListenerRule）を使用してRewriteConfigを実装
+        // 注意: RewriteConfigは型定義にないため、addPropertyOverrideを使用
 
-        // 1. パス /old-api/* を TargetGroup2 にルーティング
-        listener.addAction('OldApiPathRule', {
+        // 1. パス /old-api/* を /new-api/* に書き換えて TargetGroup2 にルーティング
+        const pathRewriteRule = new elbv2.CfnListenerRule(this, 'OldApiPathRewriteRule', {
+            listenerArn: listener.listenerArn,
             priority: 100,
             conditions: [
-                elbv2.ListenerCondition.pathPatterns(['/old-api/*'])
+                {
+                    field: 'path-pattern',
+                    pathPatternConfig: {
+                        values: ['/old-api/*']
+                    }
+                }
             ],
-            action: elbv2.ListenerAction.forward([targetGroup2])
+            actions: [
+                {
+                    type: 'forward',
+                    targetGroupArn: targetGroup2.targetGroupArn,
+                    forwardConfig: {
+                        targetGroups: [
+                            {
+                                targetGroupArn: targetGroup2.targetGroupArn,
+                                weight: 1
+                            }
+                        ]
+                    }
+                }
+            ]
         });
 
-        // 2. 特定のホストヘッダーをTargetGroup2にルーティング
-        listener.addAction('ApiHostRule', {
+        // RewriteConfigを追加（型定義にないため、addPropertyOverrideを使用）
+        pathRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
+            Path: {
+                Value: '/new-api/#{path}'
+            }
+        });
+
+        // 2. ホストヘッダー api.example.com を newapi.example.com に書き換えて TargetGroup2 にルーティング
+        const hostRewriteRule = new elbv2.CfnListenerRule(this, 'ApiHostRewriteRule', {
+            listenerArn: listener.listenerArn,
             priority: 200,
             conditions: [
-                elbv2.ListenerCondition.hostHeaders(['api.example.com'])
+                {
+                    field: 'host-header',
+                    hostHeaderConfig: {
+                        values: ['api.example.com']
+                    }
+                }
             ],
-            action: elbv2.ListenerAction.forward([targetGroup2])
+            actions: [
+                {
+                    type: 'forward',
+                    targetGroupArn: targetGroup2.targetGroupArn,
+                    forwardConfig: {
+                        targetGroups: [
+                            {
+                                targetGroupArn: targetGroup2.targetGroupArn,
+                                weight: 1
+                            }
+                        ]
+                    }
+                }
+            ]
         });
 
-        // 3. クエリパラメータ version=v1 をTargetGroup2にルーティング
-        listener.addAction('VersionQueryRule', {
+        // ホストヘッダーのRewriteConfigを追加
+        hostRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
+            Host: {
+                Value: 'newapi.example.com'
+            }
+        });
+
+        // 3. クエリパラメータ version=v1 をそのまま保持して TargetGroup2 にルーティング
+        // （クエリパラメータにsource=albを追加）
+        const queryRewriteRule = new elbv2.CfnListenerRule(this, 'VersionQueryRewriteRule', {
+            listenerArn: listener.listenerArn,
             priority: 300,
             conditions: [
-                elbv2.ListenerCondition.queryStrings([{
-                    key: 'version',
-                    value: 'v1'
-                }])
+                {
+                    field: 'query-string',
+                    queryStringConfig: {
+                        values: [
+                            {
+                                key: 'version',
+                                value: 'v1'
+                            }
+                        ]
+                    }
+                }
             ],
-            action: elbv2.ListenerAction.forward([targetGroup2])
+            actions: [
+                {
+                    type: 'forward',
+                    targetGroupArn: targetGroup2.targetGroupArn,
+                    forwardConfig: {
+                        targetGroups: [
+                            {
+                                targetGroupArn: targetGroup2.targetGroupArn,
+                                weight: 1
+                            }
+                        ]
+                    }
+                }
+            ]
+        });
+
+        // クエリパラメータのRewriteConfigを追加
+        queryRewriteRule.addPropertyOverride('Actions.0.RewriteConfig', {
+            Query: {
+                Value: '#{query}&source=alb'
+            }
         });        // 出力値
         new cdk.CfnOutput(this, 'ALBDnsName', {
             value: alb.loadBalancerDnsName,
@@ -200,15 +281,20 @@ export class AlbNewfuncStack extends cdk.Stack {
 
         new cdk.CfnOutput(this, 'TestInstructions', {
             value: [
-                'Test the routing functionality:',
-                '1. Path routing: http://' + alb.loadBalancerDnsName + '/old-api/test',
-                '2. Host header routing: curl -H "Host: api.example.com" http://' + alb.loadBalancerDnsName + '/',
-                '3. Query param routing: http://' + alb.loadBalancerDnsName + '/?version=v1',
+                'Test the URL rewrite functionality:',
+                '1. Path rewrite: curl -v http://' + alb.loadBalancerDnsName + '/old-api/test',
+                '   Expected: Path is rewritten to /new-api/old-api/test',
                 '',
-                'Note: URL rewrite feature requires manual CloudFormation template update.',
-                'After deployment, update the ListenerRules in CloudFormation console to add RewriteConfig.'
+                '2. Host header rewrite: curl -v -H "Host: api.example.com" http://' + alb.loadBalancerDnsName + '/',
+                '   Expected: Host header is rewritten to newapi.example.com',
+                '',
+                '3. Query param rewrite: curl -v http://' + alb.loadBalancerDnsName + '/?version=v1',
+                '   Expected: Query parameter "source=alb" is added',
+                '',
+                'Note: URL rewrite feature is now implemented using CDK addPropertyOverride.',
+                'The RewriteConfig is automatically included in the CloudFormation template.'
             ].join('\\n'),
-            description: 'Instructions to test routing features',
+            description: 'Instructions to test URL rewrite features',
         });
     }
 }
